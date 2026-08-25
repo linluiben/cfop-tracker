@@ -17,6 +17,18 @@ yellow stickers against grey; for PLL, the real side colours plus arrows
 showing which pieces swap. Click the diagram for a bigger view with the full
 2D map of all six sides and a 3D cube you can drag around.
 
+**Pick the alg that suits your hands.** 26 cases ship with a second or third
+way through them; pick the one you want and the card, the trainer and your
+times all follow it. You can also type your own — the app checks it against the
+case before accepting it, and tells you the move count and whether the alg is
+written from a different angle (a "start with U" badge). A wrong alg is
+rejected with a reason, so you cannot quietly save something that doesn't work.
+
+**Find an alg by how it starts.** The search box takes notation as well as
+names: type `R U R' U'` to see every case whose algorithm contains that
+sequence, which is handy when you half-remember one. Brackets and spacing don't
+matter, and `R2'`/`Rw` are understood.
+
 ![A case in detail](screenshots/case-detail.png)
 
 **Time single algorithms.** The alg trainer deals you a random case from a
@@ -48,8 +60,14 @@ npm run smoke    # loads the page in Chromium and drives the timer
 npm test         # both
 ```
 
-`npm run verify` is worth running after editing `js/algs.js`. It caught two bad
-algorithms (Ab perm and Z perm) in the original list this project grew out of.
+`npm run verify` is worth running after editing `js/algs.js` — it checks the
+alternates too. It caught two bad algorithms (Ab perm and Z perm) in the
+original list this project grew out of, and pruned several candidate alternates
+that turned out to solve a different case. Set `VERBOSE=1` to see the move count
+and setup turn it works out for each alternate.
+
+The same check runs in the browser when you add your own alg, so what you type
+in gets the same scrutiny as what ships.
 
 If you prefer different algorithms — and you will, the finger tricks that suit
 you are personal — edit `js/algs.js` and run `npm run verify`. Everything else,
@@ -72,9 +90,9 @@ repository settings once).
 | File | What's in it |
 | --- | --- |
 | `js/cube.js` | 3x3 cube model: moves, wide turns, slices, rotations, scrambles |
-| `js/algs.js` | The case list — ids, names, algorithms |
+| `js/algs.js` | The case list — ids, names, algorithms, alternates |
 | `js/render.js` | SVG case diagram, unfolded net, CSS 3D cube |
-| `js/store.js` | localStorage persistence and WCA-style averages |
+| `js/store.js` | localStorage persistence, your own algs, WCA-style averages |
 | `js/timer.js` | The stopwatch: hold-to-arm, inspection, formatting |
 | `js/app.js` | Views, cards, detail modal, trainer, solve timer |
 | `tools/` | The two test scripts |

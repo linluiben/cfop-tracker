@@ -92,19 +92,54 @@
     ["Y", "Diagonal swap", "F (R U' R' U') (R U R') F' (R U R' U') (R' F R F')"]
   ];
 
+
+  /* Alternates worth having: a second way through a case that suits different
+     hands. Some are written from a different angle, so verify-algs.cjs records
+     the U turn you need first — the app shows it as a badge. */
+  var ALTS = {
+    'oll-21': ["R U2 R' U' R U R' U' R U' R'", "F (R U R' U') (R U R' U') (R U R' U') F'"],
+    'oll-22': ["R' U2 R2 U R2 U R2 U2 R'"],
+    'oll-23': ["R2 D' R U2 R' D R U2 R"],
+    'oll-25': ["F' r U R' U' r' F R"],
+    'oll-26': ["y' R' U' R U' R' U2 R", "L' U' L U' L' U2 L"],
+    'oll-27': ["y L U L' U L U2 L'"],
+    'oll-43': ["f' L' U' L U f"],
+    'oll-44': ["f R U R' U' f'"],
+    'pll-Aa': ["y x R' U R' D2 R U' R' D2 R2", "R' F R' B2 R F' R' B2 R2"],
+    'pll-Ab': ["R B' R F2 R' B R F2 R2"],
+    'pll-E': ["R B' R' F R B R' F' R B R' F R B' R' F'"],
+    'pll-Ua': ["M2 U M U2 M' U M2"],
+    'pll-Ub': ["M2 U' M U2 M' U' M2"],
+    'pll-H': ["M2 U' M2 U2 M2 U' M2"],
+    'pll-Z': ["M2 U M2 U M' U2 M2 U2 M' U2"],
+    'pll-Ga': ["R2 u R' U R' U' R u' R2 y' R' U R"],
+    'pll-Gb': ["F' U' F R2 u R' U R U' R u' R2", "R' U' R y R2 u R' U R U' R u' R2"],
+    'pll-Gc': ["R2 u' R U' R U R' u R2 y R U' R'"],
+    'pll-Gd': ["R U R' y' R2 u' R U' R' U R' u R2"],
+    'pll-Ja': ["R' U L' U2 R U' R' U2 R L"],
+    'pll-Jb': ["R U2 R' U' R U2 L' U R' U' L"],
+    'pll-Ra': ["R U R' F' R U2 R' U2 R' F R U R U2 R' U'"],
+    'pll-Rb': ["R' U2 R U2 R' F R U R' U' R' F' R2"],
+    'pll-Nb': ["R' U R U' R' F' U' F R U R' F R' F' R U' R"],
+    'pll-V': ["R' U R' d' R' F' R2 U' R' U R' F R F"],
+    'pll-F': ["R' U2 R' d' R' F' R2 U' R' U R' F R U' F"]
+  };
+
   var PLL_GROUPS = ['Corners only', 'Edges only', 'G perm', 'Adjacent swap', 'Diagonal swap'];
 
   /* One flat list so the tracker, the trainer and the timer all agree on ids. */
   function all() {
     var out = [];
     OLL.forEach(function (o) {
-      out.push({ id: 'oll-' + o[0], set: 'oll', num: o[0], name: 'OLL ' + o[0], group: 'OLL', alg: o[1] });
+      var id = 'oll-' + o[0];
+      out.push({ id: id, set: 'oll', num: o[0], name: 'OLL ' + o[0], group: 'OLL', alg: o[1], alts: ALTS[id] || [] });
     });
     PLL.forEach(function (p) {
-      out.push({ id: 'pll-' + p[0], set: 'pll', num: '', name: p[0] + ' perm', short: p[0], group: p[1], alg: p[2] });
+      var pid = 'pll-' + p[0];
+      out.push({ id: pid, set: 'pll', num: '', name: p[0] + ' perm', short: p[0], group: p[1], alg: p[2], alts: ALTS[pid] || [] });
     });
     return out;
   }
 
-  return { OLL: OLL, PLL: PLL, PLL_GROUPS: PLL_GROUPS, all: all };
+  return { OLL: OLL, PLL: PLL, ALTS: ALTS, PLL_GROUPS: PLL_GROUPS, all: all };
 });

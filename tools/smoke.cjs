@@ -49,6 +49,45 @@ const outDir = path.resolve(__dirname, '..', 'screenshots');
   if (shots) await page.screenshot({ path: path.join(outDir, 'case-detail.png') });
   await page.keyboard.press('Escape');
 
+  // Search by notation: the moves themselves, not the case name.
+  await page.fill('#search', "R U R' U'");
+  const hits = await page.locator('.card').count();
+  if (hits === 0 || hits >= 78) throw new Error('notation search matched ' + hits + ' cases');
+  await page.fill('#search', "Z");   // a name, not notation
+  if ((await page.locator('.card-title').first().textContent()) !== 'Z perm') {
+    throw new Error('name search stopped working');
+  }
+
+  // Variants: pick a shipped alternate, then add one of your own.
+  await page.fill('#search', 'Ua');
+  await page.locator('.card .thumb').first().click();
+  await page.waitForSelector('.variant');
+  if ((await page.locator('.variant').count()) !== 2) throw new Error('Ua should ship one alternate');
+  await page.locator('.variant [data-use]').nth(1).click();
+  if (!(await page.locator('.variant').nth(1).getAttribute('class')).includes('active')) {
+    throw new Error('picking a variant did not stick');
+  }
+
+  await page.fill('#addAlgInput', 'R U R U R');           // valid notation, wrong case
+  await page.locator('#addAlgForm button[type=submit]').click();
+  if (!(await page.locator('#addAlgResult').getAttribute('class')).includes('bad')) {
+    throw new Error('a wrong alg was accepted');
+  }
+  await page.fill('#addAlgInput', "y2 M2 U M U2 M' U M2"); // valid, from another angle
+  await page.locator('#addAlgForm button[type=submit]').click();
+  const ok = await page.locator('#addAlgResult');
+  if (!(await ok.getAttribute('class')).includes('ok')) {
+    throw new Error('a correct alg was rejected: ' + (await ok.textContent()));
+  }
+  if ((await page.locator('.variant').count()) !== 3) throw new Error('custom alg was not added');
+  if (shots) await page.screenshot({ path: path.join(outDir, 'variants.png') });
+  await page.keyboard.press('Escape');
+
+  // The chosen alg is what the card and the trainer show.
+  const cardAlg = await page.locator('.card-alg').first().textContent();
+  if (!cardAlg.startsWith('y2 M2')) throw new Error('card did not follow the chosen alg: ' + cardAlg);
+  await page.fill('#search', '');
+
   // Alg trainer: hold space, release, wait, stop.
   await page.locator('.viewtab[data-view="trainer"]').click();
   await page.waitForSelector('#trainerDiagram .diagram');
@@ -90,6 +129,11 @@ const outDir = path.resolve(__dirname, '..', 'screenshots');
   if (!(await page.locator('.card').first().getAttribute('class')).includes('known')) {
     throw new Error('progress did not persist across reload');
   }
+  await page.fill('#search', 'Ua');
+  await page.locator('.card .thumb').first().click();
+  await page.waitForSelector('.variant');
+  if ((await page.locator('.variant').count()) !== 3) throw new Error('custom alg did not persist');
+  await page.keyboard.press('Escape');
 
   await browser.close();
   if (errors.length) {
