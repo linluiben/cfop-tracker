@@ -9,20 +9,31 @@
   'use strict';
 
   var KEY = 'cfop-tracker:v1';
-  var data = { status: {}, algTimes: {}, solves: [], settings: { inspection: false } };
+  var data = {
+    status: {}, algTimes: {}, solves: [],
+    userAlgs: {},   // id -> algs you typed in yourself
+    chosen: {},     // id -> the alg you want shown and trained
+    settings: { inspection: false }
+  };
   var listeners = [];
+
+  function adopt(parsed) {
+    return {
+      status: parsed.status || {},
+      algTimes: parsed.algTimes || {},
+      solves: parsed.solves || [],
+      userAlgs: parsed.userAlgs || {},
+      chosen: parsed.chosen || {},
+      settings: Object.assign({ inspection: false }, parsed.settings)
+    };
+  }
 
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
       if (raw) {
         var parsed = JSON.parse(raw);
-        data = {
-          status: parsed.status || {},
-          algTimes: parsed.algTimes || {},
-          solves: parsed.solves || [],
-          settings: Object.assign({ inspection: false }, parsed.settings)
-        };
+        data = adopt(parsed);
       }
     } catch (e) {
       console.warn('could not read saved data', e);
@@ -140,12 +151,31 @@
   function importJSON(text) {
     var parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== 'object') throw new Error('not a backup file');
-    data = {
-      status: parsed.status || {},
-      algTimes: parsed.algTimes || {},
-      solves: parsed.solves || [],
-      settings: Object.assign({ inspection: false }, parsed.settings)
-    };
+    data = adopt(parsed);
+    save();
+  }
+
+  // ---- algorithm variants --------------------------------------------------
+  function userAlgs(id) { return data.userAlgs[id] || []; }
+
+  function addUserAlg(id, alg) {
+    var list = data.userAlgs[id] = data.userAlgs[id] || [];
+    if (list.indexOf(alg) < 0) list.push(alg);
+    save();
+  }
+
+  function removeUserAlg(id, alg) {
+    var list = data.userAlgs[id] || [];
+    var at = list.indexOf(alg);
+    if (at >= 0) list.splice(at, 1);
+    if (data.chosen[id] === alg) delete data.chosen[id];
+    save();
+  }
+
+  function chosen(id) { return data.chosen[id] || null; }
+
+  function choose(id, alg) {
+    if (alg) data.chosen[id] = alg; else delete data.chosen[id];
     save();
   }
 
@@ -158,6 +188,8 @@
     addAlgTime: addAlgTime, algTimes: algTimes, clearAlgTimes: clearAlgTimes,
     addSolve: addSolve, solves: solves, updateSolve: updateSolve, removeSolve: removeSolve, clearSolves: clearSolves,
     effective: effective, best: best, mean: mean, averageOf: averageOf, bestAverageOf: bestAverageOf,
+    userAlgs: userAlgs, addUserAlg: addUserAlg, removeUserAlg: removeUserAlg,
+    chosen: chosen, choose: choose,
     exportJSON: exportJSON, importJSON: importJSON,
     settings: settings, setSetting: setSetting
   };

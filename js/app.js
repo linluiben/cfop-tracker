@@ -17,6 +17,29 @@
     return diagramCache[key];
   }
 
+  /* Every way through a case: the built-in one, the shipped alternates, and
+     anything you have typed in yourself. The diagram always comes from the
+     built-in alg — that one defines the case. */
+  function variantsOf(item) {
+    var chosen = Store.chosen(item.id);
+    var out = [{ alg: item.alg, source: 'built-in' }];
+    item.alts.forEach(function (a) { out.push({ alg: a, source: 'alternate' }); });
+    Store.userAlgs(item.id).forEach(function (a) { out.push({ alg: a, source: 'yours' }); });
+    out.forEach(function (v) {
+      v.active = chosen ? v.alg === chosen : v.source === 'built-in';
+      v.check = Cube.checkAlg(item.alg, v.alg, item.set);
+    });
+    if (!out.some(function (v) { return v.active; })) out[0].active = true;
+    return out;
+  }
+
+  function activeAlg(item) {
+    var chosen = Store.chosen(item.id);
+    if (!chosen) return item.alg;
+    var known = variantsOf(item).some(function (v) { return v.alg === chosen; });
+    return known ? chosen : item.alg;
+  }
+
   var $ = function (id) { return document.getElementById(id); };
   var fmt = Timer.format;
 
@@ -56,12 +79,24 @@
   var statusFilters = new Set();
   var searchTerm = '';
 
+  /* "R U R'" searches the moves themselves; anything else searches names.
+     Padding both sides with spaces keeps R from matching R'. */
+  function notationMatch(item, query) {
+    if (!/^[UDRLFBMESxyzw'2\s()[\]]+$/i.test(query)) return false;
+    var needle = ' ' + Cube.canonical(query) + ' ';
+    if (needle === '  ') return false;
+    return variantsOf(item).some(function (v) {
+      return (' ' + Cube.canonical(v.alg) + ' ').indexOf(needle) >= 0;
+    });
+  }
+
   function matches(item) {
     if (currentSet !== 'all' && item.set !== currentSet) return false;
     if (statusFilters.size && !statusFilters.has(Store.status(item.id))) return false;
     if (!searchTerm) return true;
-    var hay = (item.name + ' ' + (item.group || '') + ' ' + item.shape + ' ' + item.alg).toLowerCase();
-    return hay.indexOf(searchTerm.toLowerCase()) >= 0;
+    var hay = (item.name + ' ' + (item.group || '') + ' ' + item.shape).toLowerCase();
+    if (hay.indexOf(searchTerm.toLowerCase()) >= 0) return true;
+    return notationMatch(item, searchTerm);
   }
 
   function makeCard(item) {
@@ -70,7 +105,9 @@
     card.className = 'card' + (status !== 'new' ? ' ' + status : '');
     var best = Store.best(Store.algTimes(item.id));
     var meta = [];
+    var variants = variantsOf(item);
     if (item.shape) meta.push('<span class="badge">' + item.shape + '</span>');
+    if (variants.length > 1) meta.push('<span class="badge">' + variants.length + ' algs</span>');
     if (best != null) meta.push('<span class="card-best">best ' + fmt(best) + '</span>');
 
     card.innerHTML =
@@ -84,7 +121,7 @@
             '<span class="card-title">' + item.name + '</span>' +
           '</div><span class="status-dot"></span>' +
         '</div>' +
-        '<div class="card-alg">' + item.alg + '</div>' +
+        '<div class="card-alg">' + activeAlg(item) + '</div>' +
         (meta.length ? '<div class="card-meta">' + meta.join('') + '</div>' : '') +
       '</div>';
 
@@ -195,7 +232,13 @@
           '<div id="cube3dSlot"></div>' +
           '<div><div>' + Render.net(state, 250) + '</div><div class="viewlabel">all six sides</div></div>' +
         '</div>' +
-        '<div class="modal-alg">' + item.alg + '</div>' +
+        '<div class="variants" id="variants"></div>' +
+        '<form class="addalg" id="addAlgForm">' +
+          '<input class="search" id="addAlgInput" autocomplete="off" spellcheck="false" ' +
+            'placeholder="type your own alg, e.g. R U R\' U R U2 R\'">' +
+          '<button class="btn primary" type="submit">check &amp; add</button>' +
+        '</form>' +
+        '<div class="addalg-result" id="addAlgResult"></div>' +
         '<div class="row">' +
           '<button class="btn" data-status="new">new</button>' +
           '<button class="btn" data-status="learning">learning</button>' +
@@ -206,7 +249,8 @@
         '</div>' +
       '</div>';
 
-    var slot = back.querySelector('#cube3dSlot');
+    var q = function (id) { return back.querySelector('#' + id); };
+    var slot = q('cube3dSlot');
     openCube = Render.cube3d(state, 118);
     var holder = document.createElement('div');
     holder.className = 'cube-holder';
@@ -217,6 +261,29 @@
     holder.appendChild(label);
     slot.appendChild(holder);
 
+    /* One row per variant: pick one to use, delete your own, and see what the
+       checker worked out about each (length, and any U turn it assumes). */
+    function paintVariants() {
+      var list = variantsOf(item);
+      q('variants').innerHTML = list.map(function (v, i) {
+        var badges = ['<span class="badge">' + v.check.moves + ' moves</span>'];
+        if (v.check.setup) badges.push('<span class="badge warn">start with ' + v.check.setup + '</span>');
+        if (v.check.finish) badges.push('<span class="badge warn">' + v.check.finish + ' after</span>');
+        if (v.source !== 'built-in') badges.push('<span class="badge">' + v.source + '</span>');
+        return '<div class="variant' + (v.active ? ' active' : '') + '" data-index="' + i + '">' +
+          '<button class="variant-pick" data-use="' + i + '" title="use this one" ' +
+            'aria-label="use this algorithm">' + (v.active ? '●' : '○') + '</button>' +
+          '<div class="variant-body"><div class="variant-alg">' + v.alg + '</div>' +
+          '<div class="card-meta">' + badges.join('') + '</div></div>' +
+          (v.source === 'yours'
+            ? '<button class="btn danger" data-drop="' + i + '" title="delete">✕</button>'
+            : '') +
+        '</div>';
+      }).join('');
+      q('variants').dataset.count = list.length;
+    }
+    paintVariants();
+
     function paintStatus() {
       back.querySelectorAll('[data-status]').forEach(function (b) {
         b.classList.toggle('on', b.dataset.status === Store.status(item.id));
@@ -224,8 +291,55 @@
     }
     paintStatus();
 
+    q('addAlgForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = q('addAlgInput');
+      var result = q('addAlgResult');
+      var typed = input.value.trim();
+      if (!typed) return;
+      var already = variantsOf(item).some(function (v) {
+        return Cube.canonical(v.alg) === Cube.canonical(typed);
+      });
+      if (already) {
+        result.className = 'addalg-result bad';
+        result.textContent = 'you already have that one';
+        return;
+      }
+      var check = Cube.checkAlg(item.alg, typed, item.set);
+      if (!check.ok) {
+        result.className = 'addalg-result bad';
+        result.textContent = '✗ ' + check.reason;
+        return;
+      }
+      Store.addUserAlg(item.id, typed);
+      Store.choose(item.id, typed);
+      input.value = '';
+      result.className = 'addalg-result ok';
+      result.textContent = '✓ solves the case in ' + check.moves + ' moves' +
+        (check.setup ? ', starting with ' + check.setup : '') +
+        (check.finish ? ', then ' + check.finish : '') + ' — added and selected';
+      paintVariants();
+      renderAlgs();
+    });
+
     back.addEventListener('click', function (e) {
       if (e.target === back || e.target.id === 'closeDetail') { closeDetail(); return; }
+      var pick = e.target.closest('[data-use]');
+      if (pick) {
+        var chosen = variantsOf(item)[Number(pick.dataset.use)];
+        Store.choose(item.id, chosen.source === 'built-in' ? null : chosen.alg);
+        paintVariants();
+        renderAlgs();
+        return;
+      }
+      var drop = e.target.closest('[data-drop]');
+      if (drop) {
+        var doomed = variantsOf(item)[Number(drop.dataset.drop)];
+        Store.removeUserAlg(item.id, doomed.alg);
+        paintVariants();
+        renderAlgs();
+        return;
+      }
       var statusBtn = e.target.closest('[data-status]');
       if (statusBtn) {
         Store.setStatus(item.id, statusBtn.dataset.status);
@@ -323,7 +437,10 @@
     }
     $('trainerDiagram').innerHTML = diagram(currentCase, 132);
     $('trainerName').textContent = currentCase.name + (pinned ? ' (pinned)' : '');
-    $('trainerAlg').textContent = currentCase.alg;
+    // If the alg you picked is written from another angle, say so here too.
+    var alg = activeAlg(currentCase);
+    var note = alg === currentCase.alg ? null : Cube.checkAlg(currentCase.alg, alg, currentCase.set);
+    $('trainerAlg').textContent = (note && note.setup ? '(' + note.setup + ' first) ' : '') + alg;
     $('trainerAlg').className = 'timer-alg' + (showAlg ? '' : ' hidden');
     paintTrainerDisplay();
     renderTrainerStats();

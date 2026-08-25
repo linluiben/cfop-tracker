@@ -224,6 +224,56 @@
     };
   }
 
+  /* A canonical "R U R' U'" spelling: no brackets, no R2' oddities, wide
+     turns spelled the short way. Used to compare and to search algs. */
+  function canonical(alg) {
+    return parse(alg).map(function (t) {
+      return t.face + (t.times === 2 ? '2' : t.times === -1 ? "'" : '');
+    }).join(' ');
+  }
+
+  var AUF = ['', 'U', 'U2', "U'"];
+
+  /* Does `candidate` solve the same case as `caseAlg`?
+     Returns { ok, setup, finish, moves, reason }. `setup` is the U turn you
+     would do first (algs are often written from a different angle) and
+     `finish` the U turn left over at the end — both informational. */
+  function checkAlg(caseAlg, candidate, kind) {
+    var moves = parse(candidate);
+    if (!moves.length) return { ok: false, reason: 'that is not a move sequence' };
+    var stray = String(candidate).replace(/[()[\]\s]/g, '').replace(TOKEN_RE, '');
+    TOKEN_RE.lastIndex = 0;
+    if (stray) return { ok: false, reason: 'cannot read: ' + stray };
+
+    for (var i = 0; i < 4; i++) {
+      var state = caseState(caseAlg);
+      if (AUF[i]) apply(state, AUF[i]);
+      apply(state, candidate);
+      normalize(state);
+      var result = inspect(state);
+      if (!result.f2lIntact) continue;
+      if (kind === 'oll') {
+        if (result.oriented) {
+          return { ok: true, setup: AUF[i], finish: '', moves: moves.length };
+        }
+      } else if (result.oriented) {
+        for (var j = 0; j < 4; j++) {
+          var after = clone(state);
+          if (AUF[j]) apply(after, AUF[j]);
+          if (inspect(after).solved) {
+            return { ok: true, setup: AUF[i], finish: AUF[j], moves: moves.length };
+          }
+        }
+      }
+    }
+    return {
+      ok: false,
+      reason: kind === 'oll'
+        ? 'that does not orient this case (or it breaks the F2L)'
+        : 'that does not solve this case (or it breaks the F2L)'
+    };
+  }
+
   function scramble(len) {
     var faces = ['U', 'D', 'R', 'L', 'F', 'B'];
     var axis = { U: 'y', D: 'y', R: 'x', L: 'x', F: 'z', B: 'z' };
@@ -252,6 +302,8 @@
     topLayerPieces: topLayerPieces,
     caseState: caseState,
     inspect: inspect,
+    canonical: canonical,
+    checkAlg: checkAlg,
     scramble: scramble
   };
 });

@@ -38,6 +38,26 @@ for (const item of Algs.all()) {
   }
 }
 
+// Alternates must solve the same case as the primary they sit under.
+let alts = 0;
+for (const item of Algs.all()) {
+  for (const alt of item.alts) {
+    alts++;
+    const check = Cube.checkAlg(item.alg, alt, item.set);
+    if (!check.ok) {
+      bad++;
+      rows.push(`✗ ${item.name.padEnd(9)} alternate: ${check.reason}\n    ${alt}`);
+    } else if (Cube.canonical(alt) === Cube.canonical(item.alg)) {
+      bad++;
+      rows.push(`✗ ${item.name.padEnd(9)} alternate is the same as the primary\n    ${alt}`);
+    } else if (process.env.VERBOSE) {
+      console.log(`  ${item.name.padEnd(9)} alt ${check.moves}m` +
+        (check.setup ? ` setup ${check.setup}` : '') +
+        (check.finish ? ` finish ${check.finish}` : '') + `  ${alt}`);
+    }
+  }
+}
+
 // Two entries resolving to the same case means the list is mislabelled.
 const seen = new Map();
 for (const item of Algs.all()) {
@@ -55,5 +75,6 @@ for (const item of Algs.all()) {
 }
 
 console.log(rows.join('\n') || 'all clear');
-console.log(`\n${Algs.all().length - bad}/${Algs.all().length} algorithms verified`);
+const total = Algs.all().length + alts;
+console.log(`\n${total - bad}/${total} algorithms verified (${Algs.all().length} cases, ${alts} alternates)`);
 process.exit(bad ? 1 : 0);
