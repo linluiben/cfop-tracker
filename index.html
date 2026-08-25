@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CFOP tracker — OLL / PLL</title>
+<meta name="description" content="Track your OLL and PLL progress, see every case as a diagram, and time single algs or full solves.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%23f2d02c'/><rect x='16' y='16' width='24' height='24' fill='%23d63c30'/><rect x='60' y='16' width='24' height='24' fill='%233aa856'/><rect x='16' y='60' width='24' height='24' fill='%232f6fd0'/><rect x='60' y='60' width='24' height='24' fill='%23ee8b2b'/></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="title">CFOP <span class="slash">/</span> tracker</h1>
+    <p class="subtitle" id="subtitle">Click a case to cycle: new → learning → known. Progress saves in this browser.</p>
+
+    <div class="viewtabs" id="viewTabs">
+      <button class="viewtab active" data-view="algs">Algorithms</button>
+      <button class="viewtab" data-view="trainer">Alg trainer</button>
+      <button class="viewtab" data-view="solves">Solves</button>
+    </div>
+  </header>
+
+  <!-- ============ algorithms ============ -->
+  <section class="view" id="view-algs">
+    <div class="overview" id="overview"></div>
+    <div class="bar" id="bar"></div>
+
+    <div class="controls">
+      <div class="tabs" id="setTabs">
+        <button class="tab active" data-set="all">All</button>
+        <button class="tab" data-set="oll">OLL</button>
+        <button class="tab" data-set="pll">PLL</button>
+      </div>
+      <input class="search" id="search" placeholder="search name, number or shape…">
+      <button class="filter-chip" data-status="learning" id="chipLearning"><span class="dot" style="background:var(--learning)"></span>learning</button>
+      <button class="filter-chip" data-status="known" id="chipKnown"><span class="dot" style="background:var(--known)"></span>known</button>
+    </div>
+
+    <div id="content"></div>
+  </section>
+
+  <!-- ============ alg trainer ============ -->
+  <section class="view" id="view-trainer" hidden>
+    <div class="row">
+      <div class="tabs" id="scopeTabs">
+        <button class="tab active" data-scope="all">All cases</button>
+        <button class="tab" data-scope="learning">Learning</button>
+        <button class="tab" data-scope="known">Known</button>
+        <button class="tab" data-scope="oll">OLL</button>
+        <button class="tab" data-scope="pll">PLL</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn" id="toggleAlg">hide alg</button>
+      <button class="btn" id="skipCase">skip →</button>
+    </div>
+
+    <div class="timer-panel" id="trainerPanel">
+      <div class="timer-case">
+        <div id="trainerDiagram"></div>
+        <div class="case-name" id="trainerName">—</div>
+      </div>
+      <div class="timer-alg" id="trainerAlg"></div>
+      <div class="timer-display" id="trainerDisplay">0.00</div>
+      <div class="timer-hint">hold <b>space</b> (or tap and hold) until green, release to start, press again to stop</div>
+    </div>
+
+    <div class="statrow" id="trainerStats"></div>
+    <div class="row">
+      <span class="group-name" id="trainerHistoryLabel">Recent</span>
+      <span class="spacer"></span>
+      <button class="btn danger" id="clearCaseTimes">clear times for this case</button>
+    </div>
+    <div class="times" id="trainerTimes"></div>
+  </section>
+
+  <!-- ============ full solves ============ -->
+  <section class="view" id="view-solves" hidden>
+    <div class="timer-panel" id="solvePanel">
+      <div class="scramble" id="scramble"></div>
+      <div class="timer-display" id="solveDisplay">0.00</div>
+      <div class="timer-hint">hold <b>space</b> until green, release to start, press anything to stop</div>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="newScramble">new scramble</button>
+      <button class="btn" id="inspectionToggle">15s inspection: off</button>
+      <span class="spacer"></span>
+      <button class="btn" id="plus2">+2</button>
+      <button class="btn" id="dnf">DNF</button>
+      <button class="btn danger" id="deleteSolve">delete last</button>
+    </div>
+
+    <div class="statrow" id="solveStats"></div>
+    <div class="row">
+      <span class="group-name">Session</span>
+      <span class="spacer"></span>
+      <button class="btn danger" id="clearSession">clear session</button>
+    </div>
+    <div class="times" id="solveTimes"></div>
+  </section>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:var(--new); border:1px solid var(--text-faint)"></span>new</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--learning)"></span>learning</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--known)"></span>known</div>
+    <div class="spacer"></div>
+    <button class="link-btn" id="exportBtn">export data</button>
+    <button class="link-btn" id="importBtn">import</button>
+    <button class="link-btn" id="resetBtn">reset progress</button>
+  </div>
+</div>
+
+<input type="file" id="importFile" accept="application/json" hidden>
+
+<script src="js/cube.js"></script>
+<script src="js/algs.js"></script>
+<script src="js/render.js"></script>
+<script src="js/store.js"></script>
+<script src="js/timer.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
