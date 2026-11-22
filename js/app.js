@@ -47,11 +47,6 @@
 
   // ------------------------------------------------------------------ views
   var currentView = 'algs';
-  var SUBTITLES = {
-    algs: 'Click a case to cycle: new → learning → known. Click its picture to see all six sides.',
-    trainer: 'Drill single algorithms: look at the case, hold space, execute, stop. Times are kept per case.',
-    solves: 'Full solves: scramble, hold space, go. Penalties apply to your most recent solve.'
-  };
 
   function showView(name) {
     currentView = name;
@@ -61,7 +56,6 @@
     Array.prototype.forEach.call($('viewTabs').children, function (b) {
       b.classList.toggle('active', b.dataset.view === name);
     });
-    $('subtitle').textContent = SUBTITLES[name];
     trainerTimer.detach();
     solveTimer.detach();
     if (name === 'trainer') { trainerTimer.attach($('trainerPanel')); renderTrainer(); }
@@ -75,9 +69,11 @@
   });
 
   // ------------------------------------------------------- algorithms view
-  var currentSet = 'all';
-  var statusFilters = new Set();
+  var currentSet = 'all';        // follows focus: 'all' | 'oll' | 'pll'
+  var focus = null;              // the set whose colour the page has taken on
+  var statusFilter = null;       // 'known' | 'learning' | 'new' | null
   var searchTerm = '';
+  var STATUS_WORD = { known: 'Known', learning: 'Learning', 'new': 'To learn' };
 
   /* "R U R'" searches the moves themselves; anything else searches names.
      Padding both sides with spaces keeps R from matching R'. */
@@ -92,113 +88,275 @@
 
   function matches(item) {
     if (currentSet !== 'all' && item.set !== currentSet) return false;
-    if (statusFilters.size && !statusFilters.has(Store.status(item.id))) return false;
+    if (statusFilter && Store.status(item.id) !== statusFilter) return false;
     if (!searchTerm) return true;
     var hay = (item.name + ' ' + (item.group || '') + ' ' + item.shape).toLowerCase();
     if (hay.indexOf(searchTerm.toLowerCase()) >= 0) return true;
     return notationMatch(item, searchTerm);
   }
 
+  /* PLL cards show just the letter, since the blue band already says PLL;
+     the full name stays in the text for screen readers and search. */
+  function titleOf(item) {
+    if (item.set === 'pll') return item.short + '<span class="sr-only"> perm</span>';
+    return item.name;
+  }
+
   function makeCard(item) {
     var status = Store.status(item.id);
     var card = document.createElement('div');
     card.className = 'card' + (status !== 'new' ? ' ' + status : '');
+    card.tabIndex = 0;
     var best = Store.best(Store.algTimes(item.id));
-    var meta = [];
     var variants = variantsOf(item);
+    var meta = [];
+    if (status !== 'new') meta.push('<span class="state-word">' + STATUS_WORD[status] + '</span>');
     if (item.shape) meta.push('<span class="badge">' + item.shape + '</span>');
     if (variants.length > 1) meta.push('<span class="badge">' + variants.length + ' algs</span>');
-    if (best != null) meta.push('<span class="card-best">best ' + fmt(best) + '</span>');
+    if (best != null) meta.push('<span class="card-best">Best ' + fmt(best) + '</span>');
 
     card.innerHTML =
-      '<button class="thumb" title="show all sides" aria-label="show all sides of ' + item.name + '">' +
-        diagram(item, 62) +
+      '<button class="thumb" title="Show all sides" aria-label="Show all sides of ' + item.name + '">' +
+        diagram(item, 84) +
       '</button>' +
-      '<div class="card-body">' +
-        '<div class="card-top">' +
-          '<div class="card-name">' +
-            (item.num !== '' ? '<span class="card-num">' + item.num + '</span>' : '') +
-            '<span class="card-title">' + item.name + '</span>' +
-          '</div><span class="status-dot"></span>' +
-        '</div>' +
-        '<div class="card-alg">' + activeAlg(item) + '</div>' +
-        (meta.length ? '<div class="card-meta">' + meta.join('') + '</div>' : '') +
-      '</div>';
+      '<h3 class="card-title">' + titleOf(item) + '</h3>' +
+      '<div class="card-alg">' + LCD.notation(activeAlg(item)) + '</div>' +
+      (meta.length ? '<div class="card-meta">' + meta.join('') + '</div>' : '');
 
     card.addEventListener('click', function (e) {
       if (e.target.closest('.thumb')) { openDetail(item); return; }
       Store.cycleStatus(item.id);
       renderAlgs();
+      var again = document.querySelector('.card[data-id="' + item.id + '"]');
+      if (again && document.activeElement === document.body) again.focus();
     });
+    card.addEventListener('keydown', function (e) {
+      if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      Store.cycleStatus(item.id);
+      renderAlgs();
+      var again = document.querySelector('.card[data-id="' + item.id + '"]');
+      if (again) again.focus();
+    });
+    card.dataset.id = item.id;
     return card;
   }
 
-  function renderGroup(name, items, container) {
-    if (!items.length) return;
-    var group = document.createElement('div');
-    group.className = 'group';
-    var known = items.filter(function (i) { return Store.status(i.id) === 'known'; }).length;
-    group.innerHTML = '<div class="group-head"><span class="group-name">' + name +
-      '</span><span class="group-count">' + known + '/' + items.length + ' known</span></div>';
-    var grid = document.createElement('div');
-    grid.className = 'grid';
-    items.forEach(function (i) { grid.appendChild(makeCard(i)); });
-    group.appendChild(grid);
-    container.appendChild(group);
+  function grid(items) {
+    var g = document.createElement('div');
+    g.className = 'grid';
+    items.forEach(function (i) { g.appendChild(makeCard(i)); });
+    return g;
+  }
+
+  var BAND_ABOUT = {
+    oll: 'Orient the last layer: make the top all yellow.',
+    pll: 'Permute the last layer: move the pieces home.'
+  };
+
+  function renderBand(set, items, container) {
+    var all = CASES.filter(function (c) { return c.set === set; });
+    var known = all.filter(function (c) { return Store.status(c.id) === 'known'; }).length;
+    var band = document.createElement('section');
+    band.className = 'band ' + set;
+    band.id = 'band-' + set;
+    var label = set.toUpperCase();
+    band.innerHTML =
+      '<div class="wrap">' +
+        '<div class="band-head">' +
+          '<button class="band-title" data-focus="' + set + '" aria-pressed="' + (focus === set) + '" ' +
+            'title="' + (focus === set ? 'Show all cases' : 'Show only ' + label) + '">' + label + '</button>' +
+          '<div class="band-about"><strong>' + known + ' of ' + all.length + ' known</strong>' +
+            '<span>' + BAND_ABOUT[set] + '</span></div>' +
+          (focus === set ? '<button class="band-back" data-focus="">Show all cases</button>' : '') +
+        '</div>' +
+      '</div>';
+    var inner = band.firstChild;
+    if (set === 'oll') inner.appendChild(grid(items));
+    else {
+      Algs.PLL_GROUPS.forEach(function (g) {
+        var inGroup = items.filter(function (c) { return c.group === g; });
+        if (!inGroup.length) return;
+        var head = document.createElement('h3');
+        head.className = 'subgroup';
+        var groupKnown = all.filter(function (c) { return c.group === g && Store.status(c.id) === 'known'; }).length;
+        var groupTotal = all.filter(function (c) { return c.group === g; }).length;
+        head.innerHTML = g + ' <span>' + groupKnown + ' of ' + groupTotal + ' known</span>';
+        inner.appendChild(head);
+        inner.appendChild(grid(inGroup));
+      });
+    }
+    container.appendChild(band);
+  }
+
+  function renderDevice() {
+    var count = { known: 0, learning: 0, 'new': 0 };
+    CASES.forEach(function (c) { count[Store.status(c.id)]++; });
+    $('lcdKnown').innerHTML = LCD.count(count.known, 2, count.known + ' known');
+    $('lcdLearning').innerHTML = LCD.count(count.learning, 2, count.learning + ' learning');
+    $('lcdNew').innerHTML = LCD.count(count['new'], 2, count['new'] + ' to go');
+    document.querySelectorAll('.readout').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.filter === statusFilter));
+    });
+    var strip = $('strip');
+    strip.innerHTML = CASES.map(function (c, i) {
+      var s = Store.status(c.id);
+      return '<button class="' + s + '" data-i="' + i + '" tabindex="' + (i === stripIndex ? 0 : -1) + '" ' +
+        'aria-label="' + c.name + ', ' + STATUS_WORD[s].toLowerCase() + '"></button>';
+    }).join('');
+    $('stripFirst').textContent = CASES[0].name;
+    $('stripLast').textContent = CASES[CASES.length - 1].name;
+    hideTip();
+    return count;
   }
 
   function renderAlgs() {
-    var total = CASES.length;
-    var known = CASES.filter(function (c) { return Store.status(c.id) === 'known'; }).length;
-    var learning = CASES.filter(function (c) { return Store.status(c.id) === 'learning'; }).length;
-    $('overview').innerHTML =
-      '<div class="stat known"><div class="num">' + known + '</div><div class="lbl">known</div></div>' +
-      '<div class="stat learning"><div class="num">' + learning + '</div><div class="lbl">learning</div></div>' +
-      '<div class="stat"><div class="num">' + (total - known - learning) + '</div><div class="lbl">new</div></div>';
-    $('bar').innerHTML =
-      '<div class="bar-seg bar-known" style="width:' + (known / total * 100) + '%"></div>' +
-      '<div class="bar-seg bar-learning" style="width:' + (learning / total * 100) + '%"></div>';
+    var count = renderDevice();
+
+    var note = $('filterNote');
+    if (statusFilter) {
+      var what = { known: 'known cases', learning: 'cases you are learning', 'new': 'cases still to learn' }[statusFilter];
+      note.innerHTML = '<span>Showing only ' + what + ' (' + count[statusFilter] + ').</span>' +
+        '<button class="link-btn" id="clearFilter">Show all</button>';
+      note.hidden = false;
+    } else note.hidden = true;
 
     var content = $('content');
     content.innerHTML = '';
-
-    var oll = CASES.filter(function (c) { return c.set === 'oll' && matches(c); });
-    if (oll.length) renderGroup('OLL — orientation (57 cases)', oll, content);
-
-    var pll = CASES.filter(function (c) { return c.set === 'pll' && matches(c); });
-    if (pll.length) {
-      var head = document.createElement('div');
-      head.className = 'section-head';
-      head.textContent = 'PLL — permutation (21 cases)';
-      content.appendChild(head);
-      Algs.PLL_GROUPS.forEach(function (g) {
-        renderGroup(g, pll.filter(function (c) { return c.group === g; }), content);
-      });
+    ['oll', 'pll'].forEach(function (set) {
+      var items = CASES.filter(function (c) { return c.set === set && matches(c); });
+      if (items.length) renderBand(set, items, content);
+    });
+    if (!content.children.length) {
+      content.innerHTML = '<div class="wrap"><p class="empty">No cases match. Clear the search' +
+        (statusFilter ? ' or the filter' : '') + ' to see them again.</p></div>';
     }
-
-    if (!content.children.length) content.innerHTML = '<div class="empty">no cases match your filters</div>';
   }
-
-  $('setTabs').addEventListener('click', function (e) {
-    var btn = e.target.closest('.tab');
-    if (!btn) return;
-    Array.prototype.forEach.call($('setTabs').children, function (b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-    currentSet = btn.dataset.set;
-    renderAlgs();
-  });
 
   $('search').addEventListener('input', function (e) {
     searchTerm = e.target.value.trim();
     renderAlgs();
   });
 
-  [['chipLearning', 'learning'], ['chipKnown', 'known']].forEach(function (pair) {
-    $(pair[0]).addEventListener('click', function () {
-      if (statusFilters.has(pair[1])) { statusFilters.delete(pair[1]); this.classList.remove('active'); }
-      else { statusFilters.add(pair[1]); this.classList.add('active'); }
+  /* The three readouts filter the list by status; press again to clear. */
+  $('readouts').addEventListener('click', function (e) {
+    var btn = e.target.closest('.readout');
+    if (!btn) return;
+    statusFilter = statusFilter === btn.dataset.filter ? null : btn.dataset.filter;
+    renderAlgs();
+  });
+  $('filterNote').addEventListener('click', function (e) {
+    if (e.target.id === 'clearFilter') { statusFilter = null; renderAlgs(); }
+  });
+
+  /* OLL / PLL: the page floods with the set's sticker colour, then shows only
+     that set. Pressing the heading again (or "Show all cases") floods back. */
+  var wiping = false;
+  function setFocus(next, from) {
+    if (wiping || next === focus) return;
+    function apply() {
+      focus = next;
+      currentSet = next || 'all';
+      if (next) document.body.dataset.focus = next; else delete document.body.dataset.focus;
+      var leaving = focus ? null : from && from.set;
       renderAlgs();
-    });
+      var target = $(next ? 'band-' + next : 'band-' + (leaving || 'oll'));
+      if (target) window.scrollTo(0, target.getBoundingClientRect().top + window.pageYOffset - 12);
+      var title = document.querySelector('#band-' + (next || leaving || 'oll') + ' .band-title');
+      if (title) title.focus({ preventScroll: true });
+    }
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) { apply(); return; }
+    var wipe = $('wipe');
+    var at = (from ? from.x + 'px ' + from.y + 'px' : '50% 30%');
+    wipe.className = 'wipe';
+    wipe.style.background = next === 'oll' ? 'var(--yellow)' : next === 'pll' ? 'var(--blue)' : 'var(--page-base)';
+    wipe.style.clipPath = 'circle(0px at ' + at + ')';
+    void wipe.offsetWidth;
+    wiping = true;
+    wipe.className = 'wipe run';
+    wipe.style.clipPath = 'circle(150vmax at ' + at + ')';
+    setTimeout(function () {
+      apply();
+      wipe.className = 'wipe fade';
+      setTimeout(function () { wipe.className = 'wipe'; wiping = false; }, 240);
+    }, 560);
+  }
+  $('content').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-focus]');
+    if (!btn) return;
+    var r = btn.getBoundingClientRect();
+    var set = btn.closest('.band') ? btn.closest('.band').id.replace('band-', '') : null;
+    setFocus(btn.dataset.focus || null, { x: r.left + r.width / 2, y: r.top + r.height / 2, set: set });
+  });
+
+  /* The strip: hover or scrub across it to see each case, click to open it.
+     Arrow keys move along it; only one square is in the tab order. */
+  var stripIndex = 0;
+  var hot = -1;
+  function showTip(i) {
+    var strip = $('strip'), btn = strip.children[i], tip = $('stripTip');
+    if (!btn) return;
+    if (hot >= 0 && strip.children[hot]) strip.children[hot].classList.remove('hot');
+    hot = i;
+    btn.classList.add('hot');
+    var c = CASES[i];
+    tip.innerHTML = c.name + ' <span>' + STATUS_WORD[Store.status(c.id)].toLowerCase() + '</span>';
+    tip.hidden = false;
+    var wrap = strip.parentNode.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    var center = b.left - wrap.left + b.width / 2;
+    var half = tip.offsetWidth / 2;
+    var left = Math.max(half, Math.min(wrap.width - half, center));
+    tip.style.left = left + 'px';
+    tip.style.bottom = (wrap.bottom - b.top + 12) + 'px';
+    tip.style.setProperty('--ax', (center - left + half) + 'px');
+  }
+  function hideTip() {
+    var strip = $('strip');
+    if (hot >= 0 && strip.children[hot]) strip.children[hot].classList.remove('hot');
+    hot = -1;
+    $('stripTip').hidden = true;
+  }
+  function stripButtonAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    return el && el.parentNode === $('strip') ? el : null;
+  }
+  $('strip').addEventListener('pointermove', function (e) {
+    var btn = e.pointerType === 'mouse' ? e.target.closest('#strip > button') : stripButtonAt(e.clientX, e.clientY);
+    if (btn) showTip(Number(btn.dataset.i));
+  });
+  $('strip').addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse') return;
+    var btn = stripButtonAt(e.clientX, e.clientY);
+    if (btn) showTip(Number(btn.dataset.i));
+  });
+  $('strip').addEventListener('pointerleave', function (e) {
+    if (e.pointerType === 'mouse' && !$('strip').contains(document.activeElement)) hideTip();
+  });
+  $('strip').addEventListener('pointerup', function (e) {
+    if (e.pointerType !== 'mouse') setTimeout(hideTip, 900);
+  });
+  $('strip').addEventListener('click', function (e) {
+    var btn = e.target.closest('#strip > button');
+    if (btn) { stripIndex = Number(btn.dataset.i); openDetail(CASES[stripIndex]); }
+  });
+  $('strip').addEventListener('focusin', function (e) {
+    if (e.target.dataset.i != null) showTip(Number(e.target.dataset.i));
+  });
+  $('strip').addEventListener('focusout', function (e) {
+    if (!$('strip').contains(e.relatedTarget)) hideTip();
+  });
+  $('strip').addEventListener('keydown', function (e) {
+    var i = Number(e.target.dataset.i);
+    var next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: CASES.length - 1 }[e.key];
+    if (next == null) return;
+    e.preventDefault();
+    next = Math.max(0, Math.min(CASES.length - 1, next));
+    var strip = $('strip');
+    strip.children[i].tabIndex = -1;
+    strip.children[next].tabIndex = 0;
+    strip.children[next].focus();
+    stripIndex = next;
   });
 
   // ------------------------------------------------------------- case detail
@@ -215,6 +373,7 @@
 
   function openDetail(item) {
     closeDetail();
+    hideTip();
     var state = Cube.caseState(item.alg);
     var times = Store.algTimes(item.id);
 
@@ -223,29 +382,29 @@
     back.innerHTML =
       '<div class="modal" role="dialog" aria-label="' + item.name + '">' +
         '<h2>' + item.name + '</h2>' +
-        '<p class="sub">' + (item.set === 'oll' ? 'OLL' : item.group) +
-          (item.shape ? ' · ' + item.shape : '') +
-          (times.length ? ' · best ' + fmt(Store.best(times)) + ' over ' + times.length + ' attempts' : '') +
+        '<p class="sub">' + (item.set === 'oll' ? 'OLL' : 'PLL, ' + item.group.toLowerCase()) +
+          (item.shape ? ', ' + item.shape : '') +
+          (times.length ? '. Best ' + fmt(Store.best(times)) + ' over ' + times.length + ' attempts.' : '') +
         '</p>' +
         '<div class="modal-views">' +
-          '<div><div>' + diagram(item, 128) + '</div><div class="viewlabel">case</div></div>' +
+          '<div><div>' + diagram(item, 128) + '</div><div class="viewlabel">Case</div></div>' +
           '<div id="cube3dSlot"></div>' +
-          '<div><div>' + Render.net(state, 250) + '</div><div class="viewlabel">all six sides</div></div>' +
+          '<div><div>' + Render.net(state, 250) + '</div><div class="viewlabel">All six sides</div></div>' +
         '</div>' +
         '<div class="variants" id="variants"></div>' +
         '<form class="addalg" id="addAlgForm">' +
           '<input class="search" id="addAlgInput" autocomplete="off" spellcheck="false" ' +
-            'placeholder="type your own alg, e.g. R U R\' U R U2 R\'">' +
-          '<button class="btn primary" type="submit">check &amp; add</button>' +
+            'placeholder="Type your own alg, e.g. R U R\' U R U2 R\'">' +
+          '<button class="btn primary" type="submit">Check and add</button>' +
         '</form>' +
         '<div class="addalg-result" id="addAlgResult"></div>' +
         '<div class="row">' +
-          '<button class="btn" data-status="new">new</button>' +
-          '<button class="btn" data-status="learning">learning</button>' +
-          '<button class="btn" data-status="known">known</button>' +
+          '<button class="btn" data-status="new">To learn</button>' +
+          '<button class="btn" data-status="learning">Learning</button>' +
+          '<button class="btn" data-status="known">Known</button>' +
           '<span class="spacer"></span>' +
-          '<button class="btn primary" id="trainThis">time this alg</button>' +
-          '<button class="btn" id="closeDetail">close</button>' +
+          '<button class="btn primary" id="trainThis">Time this alg</button>' +
+          '<button class="btn" id="closeDetail">Close</button>' +
         '</div>' +
       '</div>';
 
@@ -257,7 +416,7 @@
     holder.appendChild(openCube);
     var label = document.createElement('div');
     label.className = 'viewlabel';
-    label.textContent = 'drag to rotate';
+    label.textContent = 'Drag to rotate';
     holder.appendChild(label);
     slot.appendChild(holder);
 
@@ -273,7 +432,7 @@
         return '<div class="variant' + (v.active ? ' active' : '') + '" data-index="' + i + '">' +
           '<button class="variant-pick" data-use="' + i + '" title="use this one" ' +
             'aria-label="use this algorithm">' + (v.active ? '●' : '○') + '</button>' +
-          '<div class="variant-body"><div class="variant-alg">' + v.alg + '</div>' +
+          '<div class="variant-body"><div class="variant-alg">' + LCD.notation(v.alg) + '</div>' +
           '<div class="card-meta">' + badges.join('') + '</div></div>' +
           (v.source === 'yours'
             ? '<button class="btn danger" data-drop="' + i + '" title="delete">✕</button>'
@@ -302,7 +461,7 @@
       });
       if (already) {
         result.className = 'addalg-result bad';
-        result.textContent = 'you already have that one';
+        result.textContent = 'You already have that one.';
         return;
       }
       var check = Cube.checkAlg(item.alg, typed, item.set);
@@ -317,7 +476,7 @@
       result.className = 'addalg-result ok';
       result.textContent = '✓ solves the case in ' + check.moves + ' moves' +
         (check.setup ? ', starting with ' + check.setup : '') +
-        (check.finish ? ', then ' + check.finish : '') + ' — added and selected';
+        (check.finish ? ', then ' + check.finish : '') + '. Added and selected.';
       paintVariants();
       renderAlgs();
     });
@@ -397,11 +556,22 @@
     }
   });
 
+  /* Both timers draw onto a Stackmat: the pads' lights show the state, the
+     LCD shows the time (or the inspection countdown). */
+  function paintStackmat(panel, display, timer, value) {
+    var st = timer.state;
+    var s = (st === 'holding' || st === 'inspecting-holding') ? 'holding' : st === 'ready' ? 'ready' :
+      st === 'running' ? 'running' : timer.isInspecting() ? 'inspecting' : 'idle';
+    panel.dataset.state = s;
+    display.className = 'lcd timer-display' + (s === 'idle' || s === 'running' ? '' : ' ' + s);
+    if (typeof value === 'string') {
+      display.innerHTML = LCD.text(value === 'DNF' ? 'dnF' : value === '+2' ? '2' : value,
+        value === '+2' ? 'plus 2 seconds' : value === 'DNF' ? 'did not finish' : value + ' seconds of inspection left');
+    } else display.innerHTML = LCD.time(value);
+  }
+
   function paintTrainerDisplay() {
-    var el = $('trainerDisplay');
-    el.className = 'timer-display' + (trainerTimer.state === 'holding' ? ' holding' :
-      trainerTimer.state === 'ready' ? ' ready' : '');
-    el.textContent = fmt(trainerTimer.elapsed);
+    paintStackmat($('trainerPanel'), $('trainerDisplay'), trainerTimer, trainerTimer.elapsed);
   }
 
   function renderTrainerStats() {
@@ -412,17 +582,17 @@
       return '<div class="stat"><div class="num">' + value + '</div><div class="lbl">' + label + '</div></div>';
     }
     $('trainerStats').innerHTML =
-      cell('last', fmt(last)) +
-      cell('best', fmt(Store.best(times))) +
+      cell('Last', fmt(last)) +
+      cell('Best', fmt(Store.best(times))) +
       cell('ao5', fmt(Store.averageOf(times, 5))) +
-      cell('attempts', times.length);
+      cell('Attempts', times.length);
 
-    $('trainerHistoryLabel').textContent = 'Recent — ' + currentCase.name;
+    $('trainerHistoryLabel').textContent = 'Recent times for ' + currentCase.name;
     $('trainerTimes').innerHTML = times.slice(-8).reverse().map(function (t, i) {
       return '<div class="time-row"><span class="idx">' + (times.length - i) + '</span>' +
         '<span class="val">' + fmt(t.t) + '</span>' +
         '<span class="scr">' + new Date(t.ts).toLocaleString() + '</span></div>';
-    }).join('') || '<div class="empty">no times for this case yet</div>';
+    }).join('') || '<div class="empty">No times for this case yet. Hold space to start.</div>';
   }
 
   function renderTrainer() {
@@ -430,17 +600,17 @@
     trainerTimer.reset();
     if (!currentCase) {
       $('trainerDiagram').innerHTML = '';
-      $('trainerName').textContent = 'no cases in this scope';
-      $('trainerAlg').textContent = '';
+      $('trainerName').textContent = 'No cases here yet';
+      $('trainerAlg').textContent = 'Mark some cases on the Algorithms page, or pick another set above.';
       renderTrainerStats();
       return;
     }
-    $('trainerDiagram').innerHTML = diagram(currentCase, 132);
+    $('trainerDiagram').innerHTML = diagram(currentCase, 128);
     $('trainerName').textContent = currentCase.name + (pinned ? ' (pinned)' : '');
     // If the alg you picked is written from another angle, say so here too.
     var alg = activeAlg(currentCase);
     var note = alg === currentCase.alg ? null : Cube.checkAlg(currentCase.alg, alg, currentCase.set);
-    $('trainerAlg').textContent = (note && note.setup ? '(' + note.setup + ' first) ' : '') + alg;
+    $('trainerAlg').innerHTML = (note && note.setup ? '(' + note.setup + ' first) ' : '') + LCD.notation(alg);
     $('trainerAlg').className = 'timer-alg' + (showAlg ? '' : ' hidden');
     paintTrainerDisplay();
     renderTrainerStats();
@@ -459,7 +629,7 @@
 
   $('toggleAlg').addEventListener('click', function () {
     showAlg = !showAlg;
-    this.textContent = showAlg ? 'hide alg' : 'show alg';
+    this.textContent = showAlg ? 'Hide alg' : 'Show alg';
     $('trainerAlg').className = 'timer-alg' + (showAlg ? '' : ' hidden');
   });
 
@@ -493,19 +663,22 @@
     }
   });
 
+  var SOLVE_HINTS = {
+    normal: 'Hold <kbd>Space</kbd> until both lights turn green, let go to start, press any key to stop.',
+    inspecting: 'Inspecting. Hold <kbd>Space</kbd> until the lights turn green, then let go to start.',
+    '+2': 'Past 15 seconds: starting now adds 2 seconds.',
+    DNF: 'Past 17 seconds: this solve will count as DNF.'
+  };
+  var solveHintKey = 'normal';
   function paintSolveDisplay() {
-    var el = $('solveDisplay');
-    var cls = 'timer-display';
-    if (solveTimer.state === 'holding' || solveTimer.state === 'inspecting-holding') cls += ' holding';
-    else if (solveTimer.state === 'ready') cls += ' ready';
-    else if (solveTimer.isInspecting()) cls += ' inspecting';
-    el.className = cls;
     var value = solveTimer.display();
-    el.textContent = typeof value === 'string' ? value : fmt(value);
+    paintStackmat($('solvePanel'), $('solveDisplay'), solveTimer, value);
+    var key = value === '+2' || value === 'DNF' ? value : solveTimer.isInspecting() ? 'inspecting' : 'normal';
+    if (key !== solveHintKey) { solveHintKey = key; $('solveHint').innerHTML = SOLVE_HINTS[key]; }
   }
 
   function renderSolves() {
-    $('scramble').textContent = scramble;
+    $('scramble').innerHTML = LCD.notation(scramble);
     paintSolveDisplay();
     $('inspectionToggle').textContent = '15s inspection: ' + (Store.settings().inspection ? 'on' : 'off');
     $('inspectionToggle').classList.toggle('on', !!Store.settings().inspection);
@@ -515,10 +688,10 @@
       return '<div class="stat"><div class="num">' + value + '</div><div class="lbl">' + label + '</div></div>';
     }
     $('solveStats').innerHTML =
-      cell('best', fmt(Store.best(list))) +
+      cell('Best', fmt(Store.best(list))) +
       cell('ao5', fmt(Store.averageOf(list, 5))) +
       cell('ao12', fmt(Store.averageOf(list, 12))) +
-      cell('solves', list.length);
+      cell('Solves', list.length);
 
     $('solveTimes').innerHTML = list.slice().reverse().map(function (s, i) {
       var index = list.length - i;
@@ -526,13 +699,13 @@
       var shown = s.penalty === 'dnf' ? 'DNF' : fmt(s.t + (s.penalty === '+2' ? 2000 : 0)) + (s.penalty === '+2' ? '+' : '');
       return '<div class="' + cls + '"><span class="idx">' + index + '</span>' +
         '<span class="val">' + shown + '</span>' +
-        '<span class="scr">' + s.scramble + '</span></div>';
-    }).join('') || '<div class="empty">no solves yet — hold space to start</div>';
+        '<span class="scr">' + LCD.notation(s.scramble) + '</span></div>';
+    }).join('') || '<div class="empty">No solves yet. Hold space to start.</div>';
   }
 
   $('newScramble').addEventListener('click', function () {
     scramble = Cube.scramble(20);
-    $('scramble').textContent = scramble;
+    $('scramble').innerHTML = LCD.notation(scramble);
   });
 
   $('inspectionToggle').addEventListener('click', function () {
@@ -598,6 +771,28 @@
     }
   });
 
+  // --------------------------------------------------------------- settings
+  /* Light is the default for everyone; dark is a choice that sticks. */
+  function applySettings() {
+    var s = Store.settings();
+    var dark = s.theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    $('themeBtn').textContent = dark ? 'Light mode' : 'Dark mode';
+    var words = s.words !== false;
+    document.body.classList.toggle('no-words', !words);
+    $('wordsBtn').textContent = 'Status words: ' + (words ? 'on' : 'off');
+    $('wordsBtn').title = 'Write "Known" or "Learning" on each case as well as colouring it';
+  }
+  $('themeBtn').addEventListener('click', function () {
+    Store.setSetting('theme', Store.settings().theme === 'dark' ? 'light' : 'dark');
+    applySettings();
+  });
+  $('wordsBtn').addEventListener('click', function () {
+    Store.setSetting('words', Store.settings().words === false);
+    applySettings();
+  });
+
   // ------------------------------------------------------------------- start
+  applySettings();
   showView('algs');
 })();

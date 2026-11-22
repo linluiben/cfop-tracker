@@ -11,7 +11,9 @@
 
   var COLORS = {
     U: '#f2d02c', D: '#f7f7f2', F: '#3aa856', B: '#2f6fd0',
-    R: '#d63c30', L: '#ee8b2b', dim: '#3a3a44', line: '#101014'
+    R: '#d63c30', L: '#ee8b2b',
+    // Theme-dependent: the page sets these, with a fallback for no stylesheet.
+    dim: 'var(--sticker-dim, #3a3a44)', line: 'var(--sticker-line, #101014)'
   };
 
   var CELL = 24, STRIP = 10, GAP = 2, PAD = 2;
@@ -21,7 +23,7 @@
 
   function rect(x, y, w, h, fill, r) {
     return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h +
-      '" rx="' + (r == null ? 2 : r) + '" fill="' + fill + '" stroke="' + COLORS.line + '" stroke-width="1"/>';
+      '" rx="' + (r == null ? 2 : r) + '" style="fill:' + fill + ';stroke:' + COLORS.line + '" stroke-width="1"/>';
   }
 
   /* Strip stickers, in reading order around the diagram. The index gymnastics
@@ -126,7 +128,7 @@
         svg += rect(ox + c * (i % 3), oy + c * Math.floor(i / 3), c, c, COLORS[f[name][i]] || COLORS.dim, 1.5);
       }
       svg += '<text x="' + (ox + face / 2) + '" y="' + (oy + face + 8) +
-        '" text-anchor="middle" font-size="7" fill="#8a8a94" font-family="monospace">' + name + '</text>';
+        '" text-anchor="middle" font-size="7" style="fill:var(--ink-3, #8a8a94)" font-family="sans-serif">' + name + '</text>';
     });
     return svg + '</svg>';
   }
