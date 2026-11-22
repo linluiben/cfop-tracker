@@ -12,6 +12,17 @@ dependencies at runtime — open `index.html` and it works, online or offline.
 known. Progress, times and settings live in `localStorage`, and there is an
 export/import button so you can move them between browsers.
 
+The counts at the top read out like a Stackmat display; press one to list only
+the cases with that status. Below them, the strip has one square per case in
+order: run the pointer (or a finger, or the arrow keys) along it to see which
+case each square is, and click to open it. Press the big **OLL** or **PLL**
+heading to flood the page with that set's colour and show only those cases.
+
+The page is light by default; **Dark mode** in the header switches it, and the
+choice sticks. Known and learning cases carry a coloured edge plus the word;
+**Status words** in the footer turns the words off if you'd rather rely on the
+colour alone.
+
 **See every case.** Each card carries the standard top-down diagram: for OLL,
 yellow stickers against grey; for PLL, the real side colours plus arrows
 showing which pieces swap. Click the diagram for a bigger view with the full
@@ -44,8 +55,8 @@ session list with penalties, and best/ao5/ao12 across the session.
 
 ![Full solves](screenshots/solves.png)
 
-Hold **space** until the timer turns green, release to start, press anything to
-stop. On a phone, hold anywhere on the timer panel instead.
+Hold **space** until both lights on the timer turn green, release to start,
+press anything to stop. On a phone, press and hold the timer itself instead.
 
 ## The diagrams are generated, not drawn
 
