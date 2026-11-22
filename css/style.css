@@ -147,8 +147,9 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible{ outline: 3p
 body[data-focus] .band{ background: transparent; }
 .band-head{ display:flex; align-items:flex-end; gap:24px; margin-bottom:22px; flex-wrap:wrap; }
 .band-title{ font: 800 clamp(96px, 17vw, 184px)/.78 var(--ui); font-stretch:75%; letter-spacing:.015em;
-  color: inherit; background:none; border:none; padding:0; margin:0 0 0 -.04em; cursor:pointer; }
-.band-title:hover{ opacity:.88; }
+  color: inherit; background:none; border:none; padding:0; margin:0 0 0 -.04em; cursor:pointer;
+  touch-action: manipulation; }
+@media (hover: hover){ .band-title:hover{ opacity:.88; } }
 .band-title:focus-visible{ outline-color: currentColor; outline-offset:6px; border-radius:6px; }
 .band-about{ padding-bottom:6px; }
 .band-about strong{ display:block; font-size:28px; font-weight:700; letter-spacing:-.02em; line-height:1.1; }
@@ -276,9 +277,16 @@ kbd{ font: 700 14px var(--ui); border:2px solid var(--line); border-bottom-width
 .cube3d-L{ transform: rotateY(-90deg) translateZ(calc(var(--cube-size) / 2)); }
 
 /* ------------------------------------------- the OLL / PLL colour wipe */
-.wipe{ position:fixed; inset:0; z-index:30; pointer-events:none; visibility:hidden; clip-path: circle(0 at 50% 50%); }
-.wipe.run{ visibility:visible; transition: clip-path .55s cubic-bezier(.7,0,.2,1); }
-.wipe.fade{ visibility:visible; opacity:0; transition: opacity .22s ease-out; }
+/* A full-size circle scaled up from the tap point. Scaling (unlike clip-path)
+   runs on the compositor, so it stays smooth on phones while the page works.
+   The box uses the large viewport so it still covers when a phone's address
+   bar slides away. */
+.wipe{ position:fixed; top:0; left:0; width:100%; height:100vh; height:100lvh; z-index:30;
+  pointer-events:none; overflow:hidden; visibility:hidden; }
+.wipe-dot{ position:absolute; border-radius:50%; transform: scale(0); }
+.wipe.run, .wipe.fade{ visibility:visible; }
+.wipe.run .wipe-dot{ transition: transform .55s cubic-bezier(.7,0,.2,1); will-change: transform; }
+.wipe.fade{ opacity:0; transition: opacity .22s ease-out; }
 
 /* ------------------------------------------------------------------ mobile */
 @media (max-width: 760px){
@@ -314,5 +322,5 @@ kbd{ font: 700 14px var(--ui); border:2px solid var(--line); border-bottom-width
   .thumb{ grid-row: span 3; margin-bottom:0; }
 }
 @media (prefers-reduced-motion: reduce){
-  *, .wipe.run, .wipe.fade{ transition: none !important; }
+  *, .wipe.run .wipe-dot, .wipe.fade{ transition: none !important; }
 }

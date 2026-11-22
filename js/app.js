@@ -267,19 +267,25 @@
     }
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduced) { apply(); return; }
-    var wipe = $('wipe');
-    var at = (from ? from.x + 'px ' + from.y + 'px' : '50% 30%');
+    var wipe = $('wipe'), dot = wipe.firstElementChild;
+    var vw = wipe.clientWidth, vh = wipe.clientHeight;
+    var x = from ? from.x : vw / 2, y = from ? from.y : vh * 0.3;
+    var r = Math.ceil(Math.hypot(Math.max(x, vw - x), Math.max(y, vh - y))) + 2;
     wipe.className = 'wipe';
-    wipe.style.background = next === 'oll' ? 'var(--yellow)' : next === 'pll' ? 'var(--blue)' : 'var(--page-base)';
-    wipe.style.clipPath = 'circle(0px at ' + at + ')';
+    dot.style.cssText = 'left:' + (x - r) + 'px;top:' + (y - r) + 'px;width:' + 2 * r + 'px;height:' + 2 * r + 'px;' +
+      'background:' + (next === 'oll' ? 'var(--yellow)' : next === 'pll' ? 'var(--blue)' : 'var(--page-base)') + ';transform:scale(0)';
     void wipe.offsetWidth;
     wiping = true;
     wipe.className = 'wipe run';
-    wipe.style.clipPath = 'circle(150vmax at ' + at + ')';
+    dot.style.transform = 'scale(1)';
     setTimeout(function () {
+      // Swap the page while it's fully covered, then wait until the new list
+      // has painted before fading, so the fade never stalls on a slow phone.
       apply();
-      wipe.className = 'wipe fade';
-      setTimeout(function () { wipe.className = 'wipe'; wiping = false; }, 240);
+      requestAnimationFrame(function () { requestAnimationFrame(function () {
+        wipe.className = 'wipe fade';
+        setTimeout(function () { wipe.className = 'wipe'; wiping = false; }, 240);
+      }); });
     }, 560);
   }
   $('content').addEventListener('click', function (e) {
